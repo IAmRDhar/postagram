@@ -1,5 +1,5 @@
 {
-    "name": "Postagram",
+    "name": "PWA-Postagram",
     "short_name": "Postagram",
     "start_url": "/index.html",
     "scope": ".",
@@ -9,7 +9,7 @@
     "description": "A fun place to post your memories!",
     "dir": "ltr",
     "lang": "en-US",
-//    "orientation": "portrait-primary",
+    "orientation": "portrait-primary",
     "icons":[
         {
             "src":"/src/images/icons/app-icon-48x48.png",
