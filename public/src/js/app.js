@@ -3,7 +3,7 @@
  * if not then instantiating the Promise using 
  * promise.js
  * 
- * LEGACY BROWSER SUPPORT
+ * LEGACY BROWSER SUPPORT FOR PROMISE
  */
 if(!window.Promise){
     /**

@@ -6,6 +6,45 @@
  */
 self.addEventListener('install', function(event){
     console.log('[Service Worker] Installing service worker...', event);
+    /**
+     * pre-caching at the installation of service worker
+     * caching stuff that wont change much, eg. the css 
+     *
+     * Dev tools -> Application -> Cache Storage
+     * 
+     * This is asyncronous code in the service worker, because it is 
+     * running in the backgroud and is event driven, therefore the install event 
+     * does not wait for the caches.oprn() to finish by default. This may lead to issues
+     * as the service worker might finish its installation and we might have a fetch request
+     * and we try to get it from the cache even though the caches.open has not completed yet.
+     * 
+     * Therefore, event.waitUntil, this will wait untill caches.open which returns a promise doesnot finish,
+     * it wait make the installation event wait.
+     */
+    event.waitUntil(
+        caches.open('static')
+            .then(function(cache){
+                /**
+                 * add files through the cache
+                 */
+                console.log('[Service Worker] Precaching app shell');
+                cache.addAll([
+                    '/',
+                    '/index.html',
+                    '/src/js/app.js',
+                    '/src/js/feed.js',
+                    '/src/js/promise.js',//adding them only for performance
+                    '/src/js/fetch.js',//adding them only for performance
+                    '/src/js/material.min.js',
+                    '/src/css/app.css',
+                    '/src/css/feed.css',
+                    '/src/images/main-image.jpg',
+                    'https://fonts.googleapis.com/css?family=Roboto:400,700',
+                    'https://fonts.googleapis.com/icon?family=Material+Icons',
+                    'https://cdnjs.cloudflare.com/ajax/libs/material-design-lite/1.3.0/material.indigo-pink.min.css'
+                ]);
+            })
+    );
 });
 
 /**
@@ -35,5 +74,27 @@ self.addEventListener('activate', function(event){
 self.addEventListener('fetch', function(event){
     console.log('[Service Worker] Fetching something...', event);
     //lets us override the data that gets sent back
-    event.respondWith(fetch(event.request));
+    event.respondWith(
+        caches.match(event.request)
+            .then(function(response){
+                if(response){
+                    return response;
+                }else{
+                    return fetch(event.request)
+                        .then(function(res){
+                            return caches.open('dynamic')
+                                .then(function(cache){
+                                    /**
+                                     * note: the response if we store it, it is consumed,
+                                     * meaning, it is empty, this is how responses work,
+                                     * we can only use them, or consome them once, storing them in the cache
+                                     * uses the response, therefore cloning and saving the response
+                                     */
+                                    cache.put(event.request.url, res.clone());
+                                    return res;
+                                })
+                        });
+                }
+            })
+    );
 });
