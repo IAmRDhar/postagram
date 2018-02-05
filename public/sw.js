@@ -1,4 +1,5 @@
-
+var CACHE_STATIC_NAME = 'static-v3';
+var CACHE_DYNAMIC_NAME = 'dynamic-v2';
 /**
  * we dont have access to DOM in the 
  * service workers, we dont have access to normal DOM e vents such as
@@ -22,7 +23,7 @@ self.addEventListener('install', function(event){
      * it wait make the installation event wait.
      */
     event.waitUntil(
-        caches.open('static')
+        caches.open(CACHE_STATIC_NAME)
             .then(function(cache){
                 /**
                  * add files through the cache
@@ -64,6 +65,25 @@ self.addEventListener('install', function(event){
  */
 self.addEventListener('activate', function(event){
     console.log('[Service Worker] Activating service worker...', event);
+    /**
+     * cleaning up the cache here, used this event instead of install
+     * because we dont wanna mess with the older version of caches,
+     * moreover the activate event will only be started once the user has closed all the 
+     * tabs, therefore it wont even mess with the working of the application
+     * 
+     */
+    event.waitUntil(
+        caches.keys()
+            .then(function(keyList){
+                //takes an array of promises and waits for all of them to finish
+                return Promise.all(keyList.map(function(key){
+                    if(key !== CACHE_STATIC_NAME && key !== CACHE_DYNAMIC_NAME){
+                        console.log('[Service worker] Removing old cache', key);
+                        return caches.delete(key);//returns a promise
+                    }
+                }));
+            })
+    );
     //it ensures that service workers have activated corrently
     return self.clients.claim();
 });
@@ -82,7 +102,7 @@ self.addEventListener('fetch', function(event){
                 }else{
                     return fetch(event.request)
                         .then(function(res){
-                            return caches.open('dynamic')
+                            return caches.open(CACHE_DYNAMIC_NAME)
                                 .then(function(cache){
                                     /**
                                      * note: the response if we store it, it is consumed,
@@ -93,6 +113,9 @@ self.addEventListener('fetch', function(event){
                                     cache.put(event.request.url, res.clone());
                                     return res;
                                 })
+                        })
+                        .catch(function(err){
+
                         });
                 }
             })
