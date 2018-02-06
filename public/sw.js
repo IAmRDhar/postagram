@@ -32,6 +32,7 @@ self.addEventListener('install', function(event){
                 cache.addAll([
                     '/',
                     '/index.html',
+                    '/offline.html',
                     '/src/js/app.js',
                     '/src/js/feed.js',
                     '/src/js/promise.js',//adding them only for performance
@@ -115,7 +116,11 @@ self.addEventListener('fetch', function(event){
                                 })
                         })
                         .catch(function(err){
-
+                            //returning the fallback page
+                            return caches.open(CACHE_STATIC_NAME)
+                                .then(function(cache){
+                                    return cache.match('/offline.html');
+                                });
                         });
                 }
             })
