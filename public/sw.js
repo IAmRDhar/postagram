@@ -1,5 +1,21 @@
 var CACHE_STATIC_NAME = 'static-v3';
 var CACHE_DYNAMIC_NAME = 'dynamic-v2';
+var STATIC_FILES = [
+    '/',
+    '/index.html',
+    '/offline.html',
+    '/src/js/app.js',
+    '/src/js/feed.js',
+    '/src/js/promise.js',//adding them only for performance
+    '/src/js/fetch.js',//adding them only for performance
+    '/src/js/material.min.js',
+    '/src/css/app.css',
+    '/src/css/feed.css',
+    '/src/images/main-image.jpg',
+    'https://fonts.googleapis.com/css?family=Roboto:400,700',
+    'https://fonts.googleapis.com/icon?family=Material+Icons',
+    'https://cdnjs.cloudflare.com/ajax/libs/material-design-lite/1.3.0/material.indigo-pink.min.css'
+];
 /**
  * we dont have access to DOM in the 
  * service workers, we dont have access to normal DOM e vents such as
@@ -29,22 +45,7 @@ self.addEventListener('install', function(event){
                  * add files through the cache
                  */
                 console.log('[Service Worker] Precaching app shell');
-                cache.addAll([
-                    '/',
-                    '/index.html',
-                    '/offline.html',
-                    '/src/js/app.js',
-                    '/src/js/feed.js',
-                    '/src/js/promise.js',//adding them only for performance
-                    '/src/js/fetch.js',//adding them only for performance
-                    '/src/js/material.min.js',
-                    '/src/css/app.css',
-                    '/src/css/feed.css',
-                    '/src/images/main-image.jpg',
-                    'https://fonts.googleapis.com/css?family=Roboto:400,700',
-                    'https://fonts.googleapis.com/icon?family=Material+Icons',
-                    'https://cdnjs.cloudflare.com/ajax/libs/material-design-lite/1.3.0/material.indigo-pink.min.css'
-                ]);
+                cache.addAll(STATIC_FILES);
             })
     );
 });
@@ -89,40 +90,98 @@ self.addEventListener('activate', function(event){
     return self.clients.claim();
 });
 
+function isInArray(string, array){
+    var cachePath;
+    if (string.indexOf(self.origin) === 0) { // request targets domain where we serve the page from (i.e. NOT a CDN)
+      console.log('matched ', string);
+      cachePath = string.substring(self.origin.length); // take the part of the URL AFTER the domain (e.g. after localhost:8080)
+    } else {
+      cachePath = string; // store the full request (for CDNs)
+    }
+    return array.indexOf(cachePath) > -1;
+}
 /**
  * whenever our web app fetches something eg. css, image. not ajax
  */
 self.addEventListener('fetch', function(event){
-    console.log('[Service Worker] Fetching something...', event);
-    //lets us override the data that gets sent back
-    event.respondWith(
-        caches.match(event.request)
-            .then(function(response){
-                if(response){
-                    return response;
-                }else{
-                    return fetch(event.request)
-                        .then(function(res){
-                            return caches.open(CACHE_DYNAMIC_NAME)
-                                .then(function(cache){
-                                    /**
-                                     * note: the response if we store it, it is consumed,
-                                     * meaning, it is empty, this is how responses work,
-                                     * we can only use them, or consome them once, storing them in the cache
-                                     * uses the response, therefore cloning and saving the response
-                                     */
-                                    cache.put(event.request.url, res.clone());
-                                    return res;
-                                })
-                        })
-                        .catch(function(err){
-                            //returning the fallback page
-                            return caches.open(CACHE_STATIC_NAME)
-                                .then(function(cache){
-                                    return cache.match('/offline.html');
-                                });
-                        });
-                }
+    var url = 'https://httpbin.org/get';
+    /**
+     * implementing the cache then network stratergy for URL 
+     * The stratergy checks if the request is made of the said url
+     * and then puts the response in the cache, inside feed.js we have called
+     * the fetch request to display data simultaneously while checking for the 
+     * same data in cache, whichever is faster in fetching the data, displays the 
+     * data on the screen, if the fetch request responds first then this listener 
+     * makes sure that the data fetched is caches accordingly in the dynamic cache
+     * 
+     * If the request is not on the server then the other cache then network stratergy is
+     * used wherein we first check the cache before sending the fetch request.
+     * 
+     * 
+     */
+    if(event.request.url.indexOf(url) > -1){
+        /**
+         * We are not checking the cache here before sending the fetch request
+         * because if we were to find the data corresponding to the request in the cache
+         * then we might override the new data from the servers with the old data of the 
+         * cache, hence we have modified the flow to fetch from servers and look into the cache for the
+         * server data simultaneouly, making necessary updations into the dynamic cache in case of the
+         * fetching from servers. 
+         */
+        event.respondWith(
+            caches.open(CACHE_DYNAMIC_NAME)
+            .then(function(cache){
+                return fetch(event.request)
+                    .then(function (res){
+                        cache.put(event.request, res.clone());
+                        return res;
+                    });
             })
-    );
+        );
+    //}else if (new RegExp('\\b' + STATIC_FILES.join('\\b|\\b') + '\\b').test(event.request.url)) {
+    }else if(isInArray(event.request.url, STATIC_FILES)){
+        /**
+         * checking if the fetch request is made for any
+         * of the pre cached files (cached in the installation step),
+         * in case it is, using the cache only
+         * stratergy to avoid any network call and
+         * simply returning from the cache itself
+         */
+        event.respondWith(
+            caches.match(event.request)
+        );
+    }else{
+        event.respondWith(
+            caches.match(event.request)
+                .then(function(response){
+                    if(response){
+                        return response;
+                    }else{
+                        return fetch(event.request)
+                            .then(function(res){
+                                return caches.open(CACHE_DYNAMIC_NAME)
+                                    .then(function(cache){
+                                        /**
+                                         * note: the response if we store it, it is consumed,
+                                         * meaning, it is empty, this is how responses work,
+                                         * we can only use them, or consome them once, storing them in the cache
+                                         * uses the response, therefore cloning and saving the response
+                                         */
+                                        cache.put(event.request.url, res.clone());
+                                        return res;
+                                    })
+                            })
+                            .catch(function(err){
+                                //returning the fallback page
+                                return caches.open(CACHE_STATIC_NAME)
+                                    .then(function(cache){
+                                        if(event.request.headers.get('accept').includes('text/html')){
+                                            return cache.match('/offline.html');
+                                        }
+                                    });
+                        });
+                    }
+                })
+        );
+    }
 });
