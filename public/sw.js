@@ -1,4 +1,8 @@
-var CACHE_STATIC_NAME = 'static-v3';
+
+importScripts('/src/js/idb.js');
+importScripts('/src/js/utility.js');
+
+var CACHE_STATIC_NAME = 'static-v5';
 var CACHE_DYNAMIC_NAME = 'dynamic-v2';
 var STATIC_FILES = [
     '/',
@@ -12,17 +16,35 @@ var STATIC_FILES = [
     '/src/css/app.css',
     '/src/css/feed.css',
     '/src/images/main-image.jpg',
+    '/src/js/idb.js',
     'https://fonts.googleapis.com/css?family=Roboto:400,700',
     'https://fonts.googleapis.com/icon?family=Material+Icons',
     'https://cdnjs.cloudflare.com/ajax/libs/material-design-lite/1.3.0/material.indigo-pink.min.css'
 ];
+
+/**
+ * setting cache size and trimming it if it exceeds
+function trimCache(cacheName, maxItems){
+    caches.open(cacheName)
+        .then(function(cache){
+            return cache.keys()
+            .then(function(keys){
+                if(keys.length > maxItems){
+                    cache.delete(keys[0])
+                        .then(trimCache(cacheName, maxItems));
+                }
+            });
+        })
+}
+*/
+
 /**
  * we dont have access to DOM in the 
  * service workers, we dont have access to normal DOM e vents such as
  * click, but a special set of events, eg. install
  */
 self.addEventListener('install', function(event){
-    console.log('[Service Worker] Installing service worker...', event);
+    //console.log('[Service Worker] Installing service worker...', event);
     /**
      * pre-caching at the installation of service worker
      * caching stuff that wont change much, eg. the css 
@@ -44,7 +66,7 @@ self.addEventListener('install', function(event){
                 /**
                  * add files through the cache
                  */
-                console.log('[Service Worker] Precaching app shell');
+                //console.log('[Service Worker] Precaching app shell');
                 cache.addAll(STATIC_FILES);
             })
     );
@@ -66,7 +88,7 @@ self.addEventListener('install', function(event){
  * new version for the service worker to activate
  */
 self.addEventListener('activate', function(event){
-    console.log('[Service Worker] Activating service worker...', event);
+    //console.log('[Service Worker] Activating service worker...', event);
     /**
      * cleaning up the cache here, used this event instead of install
      * because we dont wanna mess with the older version of caches,
@@ -80,7 +102,7 @@ self.addEventListener('activate', function(event){
                 //takes an array of promises and waits for all of them to finish
                 return Promise.all(keyList.map(function(key){
                     if(key !== CACHE_STATIC_NAME && key !== CACHE_DYNAMIC_NAME){
-                        console.log('[Service worker] Removing old cache', key);
+                        //console.log('[Service worker] Removing old cache', key);
                         return caches.delete(key);//returns a promise
                     }
                 }));
@@ -93,7 +115,7 @@ self.addEventListener('activate', function(event){
 function isInArray(string, array){
     var cachePath;
     if (string.indexOf(self.origin) === 0) { // request targets domain where we serve the page from (i.e. NOT a CDN)
-      console.log('matched ', string);
+      //console.log('matched ', string);
       cachePath = string.substring(self.origin.length); // take the part of the URL AFTER the domain (e.g. after localhost:8080)
     } else {
       cachePath = string; // store the full request (for CDNs)
@@ -104,7 +126,9 @@ function isInArray(string, array){
  * whenever our web app fetches something eg. css, image. not ajax
  */
 self.addEventListener('fetch', function(event){
-    var url = 'https://httpbin.org/get';
+    //var url = 'https://httpbin.org/get';
+    var url = 'https://postagram-40ca9.firebaseio.com/posts.json';
+    
     /**
      * implementing the cache then network stratergy for URL 
      * The stratergy checks if the request is made of the said url
@@ -129,13 +153,19 @@ self.addEventListener('fetch', function(event){
          * fetching from servers. 
          */
         event.respondWith(
-            caches.open(CACHE_DYNAMIC_NAME)
-            .then(function(cache){
-                return fetch(event.request)
-                    .then(function (res){
-                        cache.put(event.request, res.clone());
-                        return res;
+            fetch(event.request)
+                .then(function (res){
+                var clonedRes = res.clone();
+                clearAllData('posts')
+                    .then(function(){
+                        return clonedRes.json()
+                    })
+                    .then(function(data){
+                        for(var key in data){
+                            writeData('posts', data[key]);
+                        }
                     });
+                return res;
             })
         );
     //}else if (new RegExp('\\b' + STATIC_FILES.join('\\b|\\b') + '\\b').test(event.request.url)) {
@@ -167,6 +197,7 @@ self.addEventListener('fetch', function(event){
                                          * we can only use them, or consome them once, storing them in the cache
                                          * uses the response, therefore cloning and saving the response
                                          */
+                                        //trimCache(CACHE_DYNAMIC_NAME, 5);
                                         cache.put(event.request.url, res.clone());
                                         return res;
                                     })
@@ -175,6 +206,10 @@ self.addEventListener('fetch', function(event){
                                 //returning the fallback page
                                 return caches.open(CACHE_STATIC_NAME)
                                     .then(function(cache){
+                                        /**
+                                         * checking if the request is for html page
+                                         * this means that the incoming request accepts html as a response
+                                         */
                                         if(event.request.headers.get('accept').includes('text/html')){
                                             return cache.match('/offline.html');
                                         }
@@ -185,3 +220,49 @@ self.addEventListener('fetch', function(event){
         );
     }
 });
+
+//whenever service worker believed it re-established conectivity
+//or if connectivity was always there as soon as a new sync task was registered
+self.addEventListener('sync', function(event){
+    //in this block we know we have internet connection
+    //and we want to send our data to the server
+    console.log('[Service Worker] Background syncing', event);
+    if(event.tag === 'sync-new-posts'){
+        console.log('[Service Worker] Syncing new post');
+        //event does not finish preamtively and waits for sending data
+        event.waitUntil(
+            readAllData('sync-posts')
+                .then(function(data){
+                    for(var dt of data){
+                        fetch('https://us-central1-postagram-40ca9.cloudfunctions.net/storePostData', {
+                            method: 'POST',
+                            headers:  {
+                              'Content-Type': 'application/json',
+                              'Accept': 'aaplication/json',
+                            },
+                            body: JSON.stringify({
+                              id: dt.id,
+                              title:  dt.title,
+                              location: dt.location,
+                              image:  'https://firebasestorage.googleapis.com/v0/b/postagram-40ca9.appspot.com/o/sf-boat.jpg?alt=media&token=171f827f-20ca-4219-b3f5-837c719e7dd0'
+                            })
+                          })
+                            .then(function(res){
+                              console.log('Send data', res);
+                              //not updating ui here cause we dont have acces to the dom
+                              if(res.ok){
+                                res.json()
+                                    .then(function(resData){
+                                        deleteItemFromData('sync-posts', resData.id); 
+                                    })
+                              }
+                            })
+                            .catch(function(err){
+                                console.log('Error while sending data', err);
+                            });
+                    }
+                    
+                })
+        );
+    }
+})
