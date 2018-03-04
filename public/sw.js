@@ -266,3 +266,79 @@ self.addEventListener('sync', function(event){
         );
     }
 })
+
+//whenever user clicks on the notification thrown by this service worker
+self.addEventListener('notificationclick', function(event){
+    //which notification
+    var notification = event.notification;
+    //which action
+    var action = event.action;
+
+    console.log("[Service Worker] Notification" + notification);
+    if(action === 'confirm' ){
+        console.log('confirm was chosen');
+        //getting rid of the notification
+        notification.close();
+    }else{
+        console.log(action);
+        event.waitUntil(
+            clients.matchAll()
+                .then(function(clis){
+                    var client = clis.find(function(c){
+                        return c.visibilityState === 'visible'
+                    });
+
+                    //we found an open window with our app
+                    if(client !== undefined){
+                        client.navigate(notification.data.url);
+                        client.focus();
+                    }else{
+                        clients.openWindow(notification.data.url);
+                    }
+                    notification.close();
+                })
+        );
+    }
+});
+
+
+//swiped the notification | closedall notification | clicked the X
+//if we dont interact with it, just close it
+self.addEventListener('notificationclose', function(event){
+    console.log('Notification was closed', action);
+});
+
+/**
+ * When do we get a push message?
+ * when this service worker on this browser on this device
+ * has a subscription to which this push message was sent
+ * each subscription stored under server has an end point
+ * and therefore if we send a push message from our server
+ * to that subscription this sw who created the subscription
+ * will receive it.
+ */
+self.addEventListener('push', function(event){
+    console.log('Push notification received', event);
+    var data = {title: 'New', content: 'Something new happened!', openUrl: '/help'};
+    if(event.data){
+        data = JSON.parse(event.data.text());
+    }
+
+    var options = {
+        body: data.content,
+        icon: '/src/images/icons/app-icon-96x96.png',
+        badge: '/src/images/icons/app-icon-96x96.png',
+        data:   {
+            url:    data.openUrl
+        }
+    };
+
+    //to make sure sw waits to show this notification
+    event.waitUntil(
+        //active sw cant show notification, it is there to listen to events
+        //running in the background, therefore we need to get access to the 
+        //regiteration of this sw, that is the part running in the browser
+        // that is the part that connects the sw with the browser
+        self.registration.showNotification(data.title, options)
+    );
+});
