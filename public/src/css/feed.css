@@ -2,7 +2,7 @@
   z-index: 1001;
   position: fixed;
   width: 100%;
-  min-height: 100vh;
+  min-height: calc(100vh - 56px);
   overflow-y: scroll;
   bottom: 0;
   top: 56px;
@@ -12,6 +12,25 @@
   -webkit-transition: transform 0.3s ease-in-out 0.1s;
   -moz-transition: transform 0.3s ease-in-out 0.1s;
   transition: transform 0.3s ease-in-out 0.1s;
+}
+
+#create-post video, #create-post canvas{
+  width:512px;
+  max-width: 100%;
+  display:none;
+  margin:auto;
+}
+
+#create-post #pick-image{
+  display:  none;
+}
+
+#create-post #capture-btn{
+  margin :10px auto;
+}
+
+.mdl-spinner{
+  margin:auto;
 }
 
 .main-image {

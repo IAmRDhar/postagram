@@ -9,6 +9,7 @@ var STATIC_FILES = [
     '/index.html',
     '/offline.html',
     '/src/js/app.js',
+    '/src/js/utility.js',
     '/src/js/feed.js',
     '/src/js/promise.js',//adding them only for performance
     '/src/js/fetch.js',//adding them only for performance
@@ -234,18 +235,14 @@ self.addEventListener('sync', function(event){
             readAllData('sync-posts')
                 .then(function(data){
                     for(var dt of data){
+                        var postData = new FormData();
+                        postData.append('id', dt.id);
+                        postData.append('title', dt.title);
+                        postData.append('location', dt.location);
+                        postData.append('file', dt.picture, dt.id+'.png');
                         fetch('https://us-central1-postagram-40ca9.cloudfunctions.net/storePostData', {
                             method: 'POST',
-                            headers:  {
-                              'Content-Type': 'application/json',
-                              'Accept': 'aaplication/json',
-                            },
-                            body: JSON.stringify({
-                              id: dt.id,
-                              title:  dt.title,
-                              location: dt.location,
-                              image:  'https://firebasestorage.googleapis.com/v0/b/postagram-40ca9.appspot.com/o/sf-boat.jpg?alt=media&token=171f827f-20ca-4219-b3f5-837c719e7dd0'
-                            })
+                            body: postData
                           })
                             .then(function(res){
                               console.log('Send data', res);
