@@ -17,5 +17,8 @@
   "author": "Rahul Dhar",
   "devDependencies": {
     "http-server": "^0.10.0"
+  },
+  "dependencies": {
+    "geocoder": "^0.2.3"
   }
 }

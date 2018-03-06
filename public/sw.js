@@ -240,6 +240,8 @@ self.addEventListener('sync', function(event){
                         postData.append('title', dt.title);
                         postData.append('location', dt.location);
                         postData.append('file', dt.picture, dt.id+'.png');
+                        postData.append('rawLocationLat', dt.lat);
+                        postData.append('rawLocationLng', dt.lng);
                         fetch('https://us-central1-postagram-40ca9.cloudfunctions.net/storePostData', {
                             method: 'POST',
                             body: postData
